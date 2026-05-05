@@ -1,0 +1,8 @@
+# Build artifacts
+bin/build/
+bin/*.spec
+bin/__pycache__/
+
+# Test output
+portable/data/
+*.json

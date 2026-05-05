@@ -290,14 +290,14 @@ Runs automatically after uploader imports JSON to staging, before writing to ser
 
 ## TODO
 
-- [ ] Build collector.exe
-- [ ] Build netscan.exe
-- [ ] Build combine.exe
+- [x] Build collector.exe
+- [x] Build netscan.exe
+- [x] Build combine.exe
 - [ ] Build uploader.exe
 - [ ] Create database schema (init_db.py)
 - [ ] Build Flask API (api.py)
 - [ ] Build LLM processor (llm_processor.py)
 - [ ] Build web dashboard (HTML/CSS/JS)
-- [ ] Create run.bat launcher
+- [x] Create run.bat launcher
 - [ ] Test on target machines
 - [ ] Add OUI database for MAC lookup
