@@ -293,11 +293,13 @@ Runs automatically after uploader imports JSON to staging, before writing to ser
 - [x] Build collector.exe
 - [x] Build netscan.exe
 - [x] Build combine.exe
-- [ ] Build uploader.exe
-- [ ] Create database schema (init_db.py)
-- [ ] Build Flask API (api.py)
-- [ ] Build LLM processor (llm_processor.py)
-- [ ] Build web dashboard (HTML/CSS/JS)
+- [x] Build uploader.py
+- [x] Create database schema (init_db.py)
+- [x] Build Flask API (api.py)
+- [x] Build LLM processor (llm_processor.py)
+- [x] Build web dashboard (HTML/CSS/JS)
 - [x] Create run.bat launcher
 - [ ] Test on target machines
 - [ ] Add OUI database for MAC lookup
+- [ ] Package homebase for distribution
+- [ ] Create deployment scripts
