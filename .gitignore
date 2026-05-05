@@ -1,8 +1,22 @@
-# Build artifacts
-bin/build/
-bin/*.spec
-bin/__pycache__/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.spec
+*.db
 
-# Test output
-portable/data/
-*.json
+# PyInstaller
+*.spec
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
