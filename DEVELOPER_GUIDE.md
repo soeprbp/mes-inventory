@@ -218,11 +218,14 @@ mesinventory/
 
 ## TODO
 
-- [ ] Fix uploader.exe path resolution
+- [x] Fix uploader.exe path resolution
 - [ ] Test on target machines
 - [ ] Add OUI database for MAC lookup
 - [ ] Package homebase for distribution
 - [ ] Create deployment scripts
+- [ ] Add error handling to network scanner
+- [ ] Add export PDF reports
+- [ ] Add machine history/change tracking
 - [ ] Add error handling to network scanner
 - [ ] Add export PDF reports
 - [ ] Add machine history/change tracking
