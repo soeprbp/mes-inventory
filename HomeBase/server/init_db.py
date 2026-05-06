@@ -148,15 +148,49 @@ def add_or_update_machine(data_dict):
         
         if 'hardware' in data_dict:
             hw = data_dict['hardware']
+            
+            # Handle nested cpu dict from collector
+            cpu_data = hw.get('cpu', {})
+            if isinstance(cpu_data, dict):
+                cpu_name = cpu_data.get('name', '')
+                cpu_cores = cpu_data.get('cores', 0)
+                cpu_threads = cpu_data.get('threads', 0)
+            else:
+                cpu_name = cpu_data
+                cpu_cores = hw.get('cpu_cores', 0)
+                cpu_threads = hw.get('cpu_threads', 0)
+            
+            # Handle disk_info: serialize list of disks to JSON string
+            disks = hw.get('disks', [])
+            if isinstance(disks, list):
+                import json
+                disk_info = json.dumps(disks)
+                disk_count = len(disks)
+            else:
+                disk_info = str(disks) if disks else ''
+                disk_count = hw.get('disk_count', 0)
+            
+            # Get serial from bios or hardware level
+            bios_data = hw.get('bios', {})
+            if isinstance(bios_data, dict):
+                bios_version = bios_data.get('version', '')
+                bios_manufacturer = bios_data.get('manufacturer', '')
+                bios_serial = bios_data.get('serial_number', '')
+            else:
+                bios_version = bios_data
+                bios_manufacturer = hw.get('bios_manufacturer', '')
+                bios_serial = hw.get('bios_serial', '')
+            
             cursor.execute('''
                 INSERT OR REPLACE INTO hardware 
                 (machine_id, cpu, cpu_cores, cpu_threads, ram_gb, bios_version, bios_manufacturer,
                  serial_number, manufacturer, model, disk_count, disk_info, chassis_type)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (machine_id, hw.get('cpu'), hw.get('cpu_cores'), hw.get('cpu_threads'),
-                  hw.get('ram_gb'), hw.get('bios_version'), hw.get('bios_manufacturer'),
-                  hw.get('serial_number'), hw.get('manufacturer'), hw.get('model'),
-                  hw.get('disk_count'), hw.get('disk_info'), hw.get('chassis_type')))
+            ''', (machine_id, cpu_name, cpu_cores, cpu_threads,
+                  hw.get('ram_gb', 0), bios_version, bios_manufacturer,
+                  bios_serial or hw.get('serial_number', ''),
+                  hw.get('manufacturer', ''), hw.get('model', ''),
+                  disk_count, disk_info, hw.get('chassis_type', '')))
         
         if 'network' in data_dict:
             for net in data_dict['network']:

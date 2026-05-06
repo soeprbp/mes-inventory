@@ -97,7 +97,7 @@ USB Drive (Target Machines)              Home Base (Workstation)
 
 ## Known Issues
 
-### 1. Uploader.exe Path Resolution
+### 1. ~~Uploader.exe Path Resolution~~ ✅ FIXED
 **Status:** ⚠️ Not working when bundled
 
 **Problem:** When packaged with PyInstaller, the uploader can't find `init_db.py` in the server directory.

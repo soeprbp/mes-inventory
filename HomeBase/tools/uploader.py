@@ -16,10 +16,11 @@ def get_paths():
     """Get all necessary paths, works both as script and bundled exe"""
     if getattr(sys, 'frozen', False):
         # Running in PyInstaller bundle
-        bundle_dir = getattr(sys, '_MEIPASS', os.path.abspath(sys.executable))
-        # The bundle structure is: homebase/tools/uploader.exe
-        # So homebase is two levels up from the executable
-        homebase = os.path.dirname(os.path.dirname(bundle_dir))
+        # Use sys.executable to find the actual exe location (not _MEIPASS temp dir)
+        exe_dir = os.path.dirname(sys.executable)
+        # Structure: homebase/tools/uploader.exe
+        # So homebase is one level up from tools/
+        homebase = os.path.dirname(exe_dir)
     else:
         # Running as script
         homebase = str(Path(__file__).parent.parent)
@@ -137,7 +138,7 @@ def import_to_database(staging_dir: Path) -> int:
     imported = 0
     for json_file in json_files:
         try:
-            with open(json_file, 'r', encoding='utf-8') as f:
+            with open(json_file, 'r', encoding='utf-8-sig') as f:
                 data = json.load(f)
             
             # Extract location/asset tag from filename if possible
