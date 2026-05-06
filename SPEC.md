@@ -299,7 +299,10 @@ Runs automatically after uploader imports JSON to staging, before writing to ser
 - [x] Build LLM processor (llm_processor.py)
 - [x] Build web dashboard (HTML/CSS/JS)
 - [x] Create run.bat launcher
-- [ ] Test on target machines
-- [ ] Add OUI database for MAC lookup
-- [ ] Package homebase for distribution
-- [ ] Create deployment scripts
+- [x] Add OUI database for MAC lookup (871 entries + mac_lookup.py)
+- [x] Create export.py (CSV/PDF export for all data types)
+- [x] Package portable USB build script (build-portable.ps1)
+- [x] Package HomeBase distribution build script (build-homebase.ps1)
+- [x] Create init.bat (first-time HomeBase setup)
+- [x] Create run-server.bat (start Flask server)
+- [ ] Test on target MES machines (physical validation required)

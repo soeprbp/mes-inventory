@@ -8,7 +8,8 @@ import json
 import os
 import sqlite3
 from datetime import datetime
-from flask import Flask, jsonify, request, g
+from functools import wraps
+from flask import Flask, jsonify, request, g, make_response
 from flask_cors import CORS
 from pathlib import Path
 
@@ -21,13 +22,106 @@ from init_db import get_db, get_all_machines, get_machine_by_id, get_mes_devices
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
+# Security: Get API token from environment or config file
+try:
+    from config import MES_API_TOKEN, DEBUG_MODE
+    SERVER_PORT = int(os.environ.get('PORT', 5000))
+    if DEBUG_MODE:
+        print("WARNING: Debug mode enabled - not for production!")
+except ImportError:
+    # Fallback to environment variables
+    MES_API_TOKEN = os.environ.get('MES_API_TOKEN', 'changeme-in-production')
+    DEBUG_MODE = False
+    SERVER_PORT = int(os.environ.get('PORT', 5000))
+
+# Rate limiting: Simple in-memory counter (per IP)
+from collections import defaultdict
+from time import time
+rate_limit_hits = defaultdict(list)
+
+def rate_limit(max_requests=100, window_seconds=60):
+    """Rate limiting decorator"""
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            client_ip = request.remote_addr or 'unknown'
+            now = time()
+            
+            # Clean old entries
+            rate_limit_hits[client_ip] = [
+                t for t in rate_limit_hits[client_ip] 
+                if now - t < window_seconds
+            ]
+            
+            if len(rate_limit_hits[client_ip]) >= max_requests:
+                return jsonify({'error': 'Rate limit exceeded. Please try again later.'}), 429
+            
+            rate_limit_hits[client_ip].append(now)
+            return f(*args, **kwargs)
+        return wrapped
+    return decorator
+
+def require_auth(f):
+    """Simple token-based authentication decorator"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('X-API-Token') or request.args.get('token', '')
+        
+        if not token or token != MES_API_TOKEN:
+            return jsonify({'error': 'Authentication required. Provide X-API-Token header or ?token='}), 401
+        
+        return f(*args, **kwargs)
+    return decorated
+
+def add_security_headers(response):
+    """Add security headers to all responses"""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
+
+@app.after_request
+def after_request(response):
+    """Apply security headers to all responses"""
+    return add_security_headers(response)
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Endpoint not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Internal server error'}), 500
+
+@app.errorhandler(429)
+def rate_limit_exceeded(error):
+    return jsonify({'error': 'Rate limit exceeded. Please try again later.'}), 429
+
 def get_db_connection():
     """Get database connection"""
     conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), 'server.db'))
     conn.row_factory = sqlite3.Row
     return conn
 
+def sanitize_csv_value(value):
+    """Prevent CSV formula injection"""
+    if value is None:
+        return ''
+    str_value = str(value)
+    # Prefix cells starting with =, +, -, @, \t, \r, \n with single quote
+    if str_value.startswith(('=', '+', '-', '@')) or str_value.startswith(('\t', '\r', '\n')):
+        return "'" + str_value
+    return str_value
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint (no auth required)"""
+    return jsonify({'status': 'ok', 'version': '1.0.0'})
+
 @app.route('/api/machines', methods=['GET'])
+@rate_limit(max_requests=100, window_seconds=60)
+@require_auth
 def get_machines():
     """Get list of all machines with optional search"""
     search = request.args.get('search', '').lower()
@@ -85,6 +179,8 @@ def get_machines():
         conn.close()
 
 @app.route('/api/machines/<int:machine_id>', methods=['GET'])
+@rate_limit(max_requests=100, window_seconds=60)
+@require_auth
 def get_machine(machine_id):
     """Get detailed information for a specific machine"""
     conn = get_db_connection()
@@ -118,6 +214,8 @@ def get_machine(machine_id):
         conn.close()
 
 @app.route('/api/mes-devices', methods=['GET'])
+@rate_limit(max_requests=100, window_seconds=60)
+@require_auth
 def get_all_mes_devices():
     """Get all discovered MES devices across all machines"""
     limit = request.args.get('limit', type=int)
@@ -145,6 +243,8 @@ def get_all_mes_devices():
         conn.close()
 
 @app.route('/api/stats', methods=['GET'])
+@rate_limit(max_requests=100, window_seconds=60)
+@require_auth
 def get_stats():
     """Get dashboard statistics"""
     conn = get_db_connection()
@@ -184,6 +284,8 @@ def get_stats():
         conn.close()
 
 @app.route('/api/software', methods=['GET'])
+@rate_limit(max_requests=100, window_seconds=60)
+@require_auth
 def get_software():
     """Get list of all software across machines"""
     search = request.args.get('search', '').lower()
@@ -228,6 +330,8 @@ def get_software():
         conn.close()
 
 @app.route('/api/services', methods=['GET'])
+@rate_limit(max_requests=100, window_seconds=60)
+@require_auth
 def get_services():
     """Get list of all services across machines"""
     search = request.args.get('search', '').lower()
@@ -293,6 +397,8 @@ def get_services():
         conn.close()
 
 @app.route('/api/export/<format>', methods=['GET'])
+@rate_limit(max_requests=30, window_seconds=60)
+@require_auth
 def export_data(format):
     """Export data in various formats"""
     export_type = request.args.get('type', 'machines')  # machines, software, services, mes
@@ -335,19 +441,19 @@ def export_data(format):
         if format == 'json':
             result = [dict(row) for row in data]
             return jsonify(result)
-        else:  # CSV
+        else:  # CSV - sanitize to prevent formula injection
             import csv
             import io
             
             output = io.StringIO()
             writer = csv.writer(output)
-            writer.writerow(fields)
+            writer.writerow([sanitize_csv_value(f) for f in fields])
             for row in data:
-                writer.writerow([row[field] for field in fields])
+                writer.writerow([sanitize_csv_value(row[field]) for field in fields])
             
             output.seek(0)
             return output.getvalue(), 200, {
-                'Content-Type': 'text/csv',
+                'Content-Type': 'text/csv; charset=utf-8',
                 'Content-Disposition': f'attachment; filename={export_type}_{datetime.now().strftime("%Y%m%d")}.csv'
             }
     finally:
@@ -362,6 +468,5 @@ def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    # Security: Always disabled, binds to localhost only
+    app.run(host='127.0.0.1', port=SERVER_PORT, debug=False)

@@ -194,6 +194,62 @@
         // API Configuration
         const API_BASE = 'http://localhost:5000/api';
 
+        // Security: HTML entity encoder to prevent XSS
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = String(text);
+            return div.innerHTML;
+        }
+
+        // Security: Get API token from user or config
+        let API_TOKEN = '';
+
+        // Show authentication setup UI
+        function showAuthSetup(container) {
+            container.innerHTML = `
+                <div style="max-width: 400px; margin: 3rem auto; text-align: center;">
+                    <h2>MES Inventory - Authentication Required</h2>
+                    <p style="color: #64748b; margin: 1rem 0;">Enter your API token to access the dashboard.</p>
+                    <input type="password" id="api-token-input" placeholder="Enter API Token" 
+                           style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 1rem;">
+                    <button onclick="submitToken()" class="btn btn-primary" style="width: 100%;">Connect</button>
+                    <p id="auth-error" style="color: #dc2626; margin-top: 1rem; display: none;"></p>
+                </div>
+            `;
+        }
+
+        function submitToken() {
+            const input = document.getElementById('api-token-input');
+            const errorEl = document.getElementById('auth-error');
+            API_TOKEN = input.value.trim();
+            
+            if (!API_TOKEN) {
+                errorEl.textContent = 'Please enter a token';
+                errorEl.style.display = 'block';
+                return;
+            }
+            
+            // Test the token by fetching stats
+            fetch(`${API_BASE}/stats?token=${encodeURIComponent(API_TOKEN)}`)
+                .then(r => {
+                    if (r.ok) {
+                        errorEl.style.display = 'none';
+                        loadTab('dashboard');
+                    } else if (r.status === 401) {
+                        errorEl.textContent = 'Invalid token';
+                        errorEl.style.display = 'block';
+                    } else {
+                        errorEl.textContent = 'Connection error';
+                        errorEl.style.display = 'block';
+                    }
+                })
+                .catch(() => {
+                    errorEl.textContent = 'Cannot connect to server';
+                    errorEl.style.display = 'block';
+                });
+        }
+
         // Tab navigation
         document.querySelectorAll('nav a').forEach(link => {
             link.addEventListener('click', (e) => {
@@ -209,6 +265,12 @@
             content.innerHTML = '<div id="loading">Loading...</div>';
             
             try {
+                // If no token configured, show setup prompt
+                if (!API_TOKEN) {
+                    showAuthSetup(content);
+                    return;
+                }
+                
                 switch(tab) {
                     case 'dashboard':
                         await loadDashboard(content);
@@ -240,23 +302,23 @@
                 <div class="stats">
                     <div class="stat-card">
                         <h3>Total Machines</h3>
-                        <div class="value">${stats.total_machines}</div>
+                        <div class="value">${escapeHtml(stats.total_machines)}</div>
                     </div>
                     <div class="stat-card">
                         <h3>Machines Today</h3>
-                        <div class="value">${stats.machines_today}</div>
+                        <div class="value">${escapeHtml(stats.machines_today)}</div>
                     </div>
                     <div class="stat-card">
                         <h3>Unique Software</h3>
-                        <div class="value">${stats.total_software}</div>
+                        <div class="value">${escapeHtml(stats.total_software)}</div>
                     </div>
                     <div class="stat-card">
                         <h3>MES Devices</h3>
-                        <div class="value">${stats.total_mes_devices}</div>
+                        <div class="value">${escapeHtml(stats.total_mes_devices)}</div>
                     </div>
                     <div class="stat-card">
                         <h3>Running Services</h3>
-                        <div class="value">${stats.running_services}</div>
+                        <div class="value">${escapeHtml(stats.running_services)}</div>
                     </div>
                 </div>
                 <div class="table-container">
@@ -268,7 +330,7 @@
                         <tbody>
                             ${stats.recent_machines.map(m => `
                                 <tr>
-                                    <td>${m.hostname}</td>
+                                    <td>${escapeHtml(m.hostname)}</td>
                                     <td>${new Date(m.last_seen).toLocaleString()}</td>
                                 </tr>
                             `).join('')}
@@ -279,7 +341,7 @@
         }
 
         async function loadMachines(container) {
-            const response = await fetch(`${API_BASE}/machines`);
+            const response = await fetch(`${API_BASE}/machines?token=${encodeURIComponent(API_TOKEN)}`);
             const machines = await response.json();
             
             container.innerHTML = `
@@ -293,10 +355,10 @@
                         <tbody id="machine-table">
                             ${machines.map(m => `
                                 <tr>
-                                    <td>${m.hostname}</td>
-                                    <td>${m.location || '-'}</td>
-                                    <td>${m.asset_tag || '-'}</td>
-                                    <td>${m.software_count || 0}</td>
+                                    <td>${escapeHtml(m.hostname)}</td>
+                                    <td>${escapeHtml(m.location || '-')}</td>
+                                    <td>${escapeHtml(m.asset_tag || '-')}</td>
+                                    <td>${escapeHtml(m.software_count || 0)}</td>
                                     <td>${new Date(m.last_seen).toLocaleString()}</td>
                                 </tr>
                             `).join('')}
@@ -316,7 +378,7 @@
         }
 
         async function loadSoftware(container) {
-            const response = await fetch(`${API_BASE}/software`);
+            const response = await fetch(`${API_BASE}/software?token=${encodeURIComponent(API_TOKEN)}`);
             const software = await response.json();
             
             container.innerHTML = `
@@ -327,10 +389,10 @@
                         <tbody>
                             ${software.slice(0, 50).map(s => `
                                 <tr>
-                                    <td>${s.name}</td>
-                                    <td>${s.version}</td>
-                                    <td>${s.publisher}</td>
-                                    <td>${s.installed_on_list.length} machines</td>
+                                    <td>${escapeHtml(s.name)}</td>
+                                    <td>${escapeHtml(s.version)}</td>
+                                    <td>${escapeHtml(s.publisher)}</td>
+                                    <td>${escapeHtml(s.installed_on_list.length)} machines</td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -340,7 +402,7 @@
         }
 
         async function loadMesDevices(container) {
-            const response = await fetch(`${API_BASE}/mes-devices`);
+            const response = await fetch(`${API_BASE}/mes-devices?token=${encodeURIComponent(API_TOKEN)}`);
             const devices = await response.json();
             
             container.innerHTML = `
@@ -351,10 +413,10 @@
                         <tbody>
                             ${devices.map(d => `
                                 <tr>
-                                    <td>${d.ip_address}</td>
-                                    <td>${d.port}</td>
-                                    <td>${d.protocol}</td>
-                                    <td>${d.vendor}</td>
+                                    <td>${escapeHtml(d.ip_address)}</td>
+                                    <td>${escapeHtml(d.port)}</td>
+                                    <td>${escapeHtml(d.protocol)}</td>
+                                    <td>${escapeHtml(d.vendor)}</td>
                                     <td>${new Date(d.last_seen).toLocaleString()}</td>
                                 </tr>
                             `).join('')}
@@ -381,7 +443,7 @@
         }
 
         function exportData(type, format) {
-            window.open(`${API_BASE}/export/${format}?type=${type}`, '_blank');
+            window.open(`${API_BASE}/export/${format}?type=${type}&token=${encodeURIComponent(API_TOKEN)}`, '_blank');
         }
 
         // Load dashboard by default
