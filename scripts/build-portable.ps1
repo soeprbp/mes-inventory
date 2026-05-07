@@ -2,7 +2,7 @@
 # Package the USB collection tools into a ready-to-copy folder
 
 $dest = Join-Path (Split-Path $PSScriptRoot -Parent) "portable"
-$binPath = Join-Path (Split-Path $PSScriptRoot -Parent) "bin"
+$binPath = Join-Path (Split-Path $PSScriptRoot -Parent) "mes-inventory\bin"
 
 # 1. Clean existing portable folder
 if (Test-Path $dest) {
@@ -32,9 +32,39 @@ foreach ($file in $binFiles) {
 # 4. Create RunInventory.bat
 $runBatContent = @"
 @echo off
-echo Starting MES Inventory Collection...
-cd %~dp0
-collector.exe
+echo ========================================
+echo MES Inventory Collection
+echo ========================================
+cd /d "%~dp0"
+
+echo [1/3] Running hardware/software collector...
+collector.exe --output output.json
+if errorlevel 1 (
+    echo ERROR: collector.exe failed with code %errorlevel%
+    pause
+    exit /b %errorlevel%
+)
+
+echo [2/3] Running network scanner...
+netscan.exe --output scan.json
+if errorlevel 1 (
+    echo ERROR: netscan.exe failed with code %errorlevel%
+    pause
+    exit /b %errorlevel%
+)
+
+echo [3/3] Combining results...
+combine.exe --hw output.json --net scan.json
+if errorlevel 1 (
+    echo ERROR: combine.exe failed with code %errorlevel%
+    pause
+    exit /b %errorlevel%
+)
+
+echo.
+echo ========================================
+echo Collection complete!
+echo ========================================
 pause
 "@
 $runBatPath = Join-Path $inventoryPath "RunInventory.bat"
@@ -52,13 +82,17 @@ This folder contains the portable USB inventory collection tools.
 Files:
 - collector.exe    : Main inventory collection tool
 - netscan.exe      : Network scanner for discovering devices
-- combine.exe      : Tool to combine inventory data
-- RunInventory.bat : Launches the inventory collection
+- combine.exe      : Combines collector and network scan output
+- RunInventory.bat : Launches the full inventory collection
+
+Output files:
+- output.json      : Hardware/software inventory results
+- scan.json        : Network scan results
+- <hostname>_<timestamp>.json  : Combined final output
 
 Usage:
 1. Run RunInventory.bat to start collection
-2. Inventory data will be saved to data/inventory/
-3. Copy the data/inventory/ folder to HomeBase for processing
+2. Copy the combined JSON file to your HomeBase data/ directory
 
 For more information, contact the MES team.
 "@

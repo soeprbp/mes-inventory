@@ -1,11 +1,15 @@
 # MES Inventory API Configuration
-# Copy this file to config.py and set your actual values
 
 # API Token - REQUIRED for authentication
 # Set via environment variable: export MES_API_TOKEN=your-secret-token
-# Or set directly here (not recommended for production):
 MES_API_TOKEN = 'changeme-in-production'
+DEBUG_MODE = False
 
 # Server Configuration
 PORT = 5000
-HOST = '127.0.0.1'  # Only binds to localhost for security
+HOST = '127.0.0.1'
+
+# OpenAI Configuration for LLM Processor
+# Set via environment variable: export OPENAI_API_KEY=sk-...
+OPENAI_API_KEY = ''
+OPENAI_MODEL = 'gpt-4o-mini'
