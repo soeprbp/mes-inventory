@@ -8,9 +8,9 @@ import json
 import os
 import sys
 import subprocess
+import shutil
 from datetime import datetime
 from pathlib import Path
-import sqlite3
 
 
 def get_paths():
@@ -30,17 +30,22 @@ def get_paths():
 def get_llm_analysis(hardware_data: dict) -> str:
     """Get LLM analysis of hardware data via OpenCode built-in model"""
     try:
-        prompt = f"""Based on this hardware inventory data, identify the device type and likely purpose:
-
-Hardware:
-- CPU: {hardware_data.get('cpu', {}).get('name', 'Unknown')} ({hardware_data.get('cpu', {}).get('cores', 0)} cores, {hardware_data.get('cpu', {}).get('threads', 0)} threads)
-- RAM: {hardware_data.get('ram_gb', 0)} GB
-- BIOS: {hardware_data.get('bios', {}).get('version', 'Unknown')} by {hardware_data.get('bios', {}).get('manufacturer', 'Unknown')}
-- System: {hardware_data.get('manufacturer', 'Unknown')} {hardware_data.get('model', 'Unknown')} ({hardware_data.get('chassis_type', 'Unknown')})
-- Serial: {hardware_data.get('serial_number', 'Unknown')}
-- Disks: {hardware_data.get('disk_count', 0)} disks totaling ~{sum(d.get('size_gb', 0) for d in hardware_data.get('disks', [])):.1f} GB
-
-What type of device is this (workstation, server, laptop, industrial controller, HMI, PLC, etc.) and what is its likely purpose in an industrial/MES environment? Provide a concise analysis in 1-2 sentences."""
+        prompt = (
+            f"Based on this hardware inventory data, identify the device type and likely purpose. "
+            f"CPU: {hardware_data.get('cpu', {}).get('name', 'Unknown')} "
+            f"({hardware_data.get('cpu', {}).get('cores', 0)} cores, {hardware_data.get('cpu', {}).get('threads', 0)} threads). "
+            f"RAM: {hardware_data.get('ram_gb', 0)} GB. "
+            f"BIOS: {hardware_data.get('bios', {}).get('version', 'Unknown')} "
+            f"by {hardware_data.get('bios', {}).get('manufacturer', 'Unknown')}. "
+            f"System: {hardware_data.get('manufacturer', 'Unknown')} "
+            f"{hardware_data.get('model', 'Unknown')} ({hardware_data.get('chassis_type', 'Unknown')}). "
+            f"Serial: {hardware_data.get('serial_number', 'Unknown')}. "
+            f"Disks: {hardware_data.get('disk_count', 0)} disks totaling ~"
+            f"{sum(d.get('size_gb', 0) for d in hardware_data.get('disks', [])):.1f} GB. "
+            f"What type of device is this (workstation, server, laptop, industrial controller, HMI, PLC, etc.) "
+            f"and what is its likely purpose in an industrial/MES environment? "
+            f"Provide a concise analysis in 1-2 sentences."
+        )
 
         cmd = ["opencode-cli", "run", "--pure", "--dangerously-skip-permissions", "--format", "json", prompt]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -159,6 +164,63 @@ def process_staging_files(data_path: str) -> int:
     return processed
 
 
+def import_to_database(data_path: str) -> int:
+    """Import enriched JSON files from backup into SQLite database"""
+    backup_dir = Path(data_path) / "backup"
+    if not backup_dir.exists():
+        print("No backup directory found")
+        return 0
+
+    json_files = list(backup_dir.glob("*.json"))
+    if not json_files:
+        print("  No files to import")
+        return 0
+
+    try:
+        sys.path.insert(0, str(Path(__file__).parent / "server"))
+        from init_db import add_or_update_machine, init_db
+
+        init_db()
+    except ImportError as e:
+        print(f"  Database import error: {e}")
+        return 0
+
+    imported = 0
+    for json_file in json_files:
+        try:
+            with open(json_file, 'r', encoding='utf-8-sig') as f:
+                data = json.load(f)
+
+            parts = json_file.stem.split('_')
+            location = ""
+            asset_tag = ""
+            if len(parts) >= 4:
+                location = parts[1]
+                asset_tag = parts[2]
+            elif len(parts) >= 3:
+                location = parts[1]
+
+            data['location'] = location
+            data['asset_tag'] = asset_tag
+
+            machine_id = add_or_update_machine(data)
+            print(f"  Imported: {data.get('hostname', 'UNKNOWN')} (ID: {machine_id})")
+
+            archive_dir = Path(data_path) / "archive"
+            archive_dir.mkdir(exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            archive_file = archive_dir / f"{json_file.stem}_{timestamp}{json_file.suffix}"
+            shutil.move(str(json_file), str(archive_file))
+            imported += 1
+        except Exception as e:
+            print(f"  Error importing {json_file.name}: {e}")
+            error_dir = Path(data_path) / "error"
+            error_dir.mkdir(exist_ok=True)
+            shutil.move(str(json_file), str(error_dir / json_file.name))
+
+    return imported
+
+
 def main():
     print("=" * 50)
     print("MES Inventory LLM Processor")
@@ -171,12 +233,16 @@ def main():
     print(f"Data path: {data_path}")
     print()
     
-    # Process staging files
+    # Step 1: Process staging files with LLM
     processed = process_staging_files(data_path)
+    
+    # Step 2: Import enriched files into database
+    imported = import_to_database(data_path)
     
     print()
     print("=" * 50)
     print(f"LLM processing complete! {processed} files analyzed.")
+    print(f"Database import complete! {imported} machines added.")
     print("=" * 50)
     
     return 0
