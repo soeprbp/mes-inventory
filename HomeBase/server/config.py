@@ -9,7 +9,4 @@ DEBUG_MODE = False
 PORT = 5000
 HOST = '127.0.0.1'
 
-# OpenAI Configuration for LLM Processor
-# Set via environment variable: export OPENAI_API_KEY=sk-...
-OPENAI_API_KEY = ''
-OPENAI_MODEL = 'gpt-4o-mini'
+# LLM analysis uses OpenCode built-in model (opencode-cli run)

@@ -7,9 +7,7 @@ Automatically enriches inventory data with LLM analysis for device identificatio
 import json
 import os
 import sys
-import urllib.request
-import urllib.error
-import ssl
+import subprocess
 from datetime import datetime
 from pathlib import Path
 import sqlite3
@@ -29,26 +27,8 @@ def get_paths():
     return homebase, server_path, data_path
 
 
-def get_openai_config():
-    """Read OpenAI config from config.py or environment"""
-    try:
-        sys.path.insert(0, str(Path(__file__).parent.parent / "server"))
-        from config import OPENAI_API_KEY, OPENAI_MODEL
-        api_key = OPENAI_API_KEY or os.environ.get('OPENAI_API_KEY', '')
-        model = OPENAI_MODEL
-    except ImportError:
-        api_key = os.environ.get('OPENAI_API_KEY', '')
-        model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
-    return api_key, model
-
-
 def get_llm_analysis(hardware_data: dict) -> str:
-    """Get LLM analysis of hardware data via OpenAI API"""
-    api_key, model = get_openai_config()
-    
-    if not api_key:
-        return generate_fallback_analysis(hardware_data)
-    
+    """Get LLM analysis of hardware data via OpenCode built-in model"""
     try:
         prompt = f"""Based on this hardware inventory data, identify the device type and likely purpose:
 
@@ -62,36 +42,35 @@ Hardware:
 
 What type of device is this (workstation, server, laptop, industrial controller, HMI, PLC, etc.) and what is its likely purpose in an industrial/MES environment? Provide a concise analysis in 1-2 sentences."""
 
-        body = json.dumps({
-            "model": model,
-            "messages": [
-                {"role": "system", "content": "You are an industrial IT analyst specializing in MES environment device identification."},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": 150,
-            "temperature": 0.3
-        }).encode('utf-8')
+        cmd = ["opencode-cli", "run", "--pure", "--dangerously-skip-permissions", "--format", "json", prompt]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
 
-        req = urllib.request.Request(
-            "https://api.openai.com/v1/chat/completions",
-            data=body,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-        )
+        if result.returncode != 0:
+            return f"LLM analysis error: opencode returned code {result.returncode}"
 
-        ctx = ssl.create_default_context()
-        resp = urllib.request.urlopen(req, context=ctx, timeout=30)
-        result = json.loads(resp.read().decode('utf-8'))
-        return result['choices'][0]['message']['content'].strip()
+        # Parse JSON event stream, collect assistant text
+        parts = []
+        for line in result.stdout.strip().split('\n'):
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+                if event.get('type') == 'text':
+                    text = event.get('part', {}).get('text', '')
+                    if text:
+                        parts.append(text)
+            except json.JSONDecodeError:
+                continue
+        response = ' '.join(parts).strip()
+        if response:
+            return response
 
-    except urllib.error.HTTPError as e:
-        if e.code == 401:
-            return "LLM analysis error: Invalid API key"
-        return f"LLM analysis error: HTTP {e.code}"
-    except urllib.error.URLError:
         return generate_fallback_analysis(hardware_data)
+
+    except subprocess.TimeoutExpired:
+        return "LLM analysis error: opencode timed out"
+    except FileNotFoundError:
+        return "LLM analysis error: opencode-cli not found"
     except Exception as e:
         return f"LLM analysis error: {str(e)}"
 
