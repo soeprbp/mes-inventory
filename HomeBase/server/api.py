@@ -7,6 +7,7 @@ Provides REST endpoints for accessing inventory data.
 import json
 import os
 import sqlite3
+import logging
 from datetime import datetime
 from functools import wraps
 from flask import Flask, jsonify, request, g, make_response
@@ -20,19 +21,42 @@ sys.path.append(server_path)
 from init_db import get_db, get_all_machines, get_machine_by_id, get_mes_devices
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
 
-# Security: Get API token from environment or config file
-try:
-    from config import MES_API_TOKEN, DEBUG_MODE
-    SERVER_PORT = int(os.environ.get('PORT', 5000))
-    if DEBUG_MODE:
-        print("WARNING: Debug mode enabled - not for production!")
-except ImportError:
-    # Fallback to environment variables
-    MES_API_TOKEN = os.environ.get('MES_API_TOKEN', 'changeme-in-production')
-    DEBUG_MODE = False
-    SERVER_PORT = int(os.environ.get('PORT', 5000))
+# --- SECURITY: Restrict CORS to localhost only ---
+CORS(app, origins=[
+    'http://localhost:5000',
+    'http://127.0.0.1:5000',
+    'http://localhost',
+    'http://127.0.0.1'
+])
+
+# --- SECURITY: Force MES_API_TOKEN from environment ---
+MES_API_TOKEN = os.environ.get('MES_API_TOKEN')
+if not MES_API_TOKEN:
+    raise RuntimeError(
+        "FATAL: MES_API_TOKEN environment variable is required.\n"
+        "Set it with:   set MES_API_TOKEN=your-secret-token   (Windows)\n"
+        "Or:           export MES_API_TOKEN=your-secret-token  (Linux/Mac)"
+    )
+
+SERVER_PORT = int(os.environ.get('PORT', 5000))
+DEBUG_MODE = False
+
+# --- AUDIT LOGGING ---
+logging.basicConfig(
+    filename=os.path.join(os.path.dirname(__file__), 'api_audit.log'),
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)s | %(message)s'
+)
+
+@app.before_request
+def log_request():
+    """Log all API requests for audit trail"""
+    # Skip logging for health check to reduce noise
+    if request.path != '/api/health':
+        logging.info(
+            f"REQUEST | {request.remote_addr} | {request.method} {request.path}"
+        )
 
 # Rate limiting: Simple in-memory counter (per IP)
 from collections import defaultdict
@@ -62,13 +86,33 @@ def rate_limit(max_requests=100, window_seconds=60):
     return decorator
 
 def require_auth(f):
-    """Simple token-based authentication decorator"""
+    """Token-based authentication decorator.
+    
+    Accepts token via:
+      - Authorization: Bearer <token> header (preferred)
+      - X-API-Token header (legacy)
+    
+    Token in URL query string (?token=) is NOT supported for security
+    reasons (exposed in browser history, server logs, referrer headers).
+    """
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = request.headers.get('X-API-Token') or request.args.get('token', '')
+        token = None
+        
+        # 1. Try Authorization: Bearer header (preferred)
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header[7:]
+        
+        # 2. Fallback to X-API-Token header (legacy support)
+        if not token:
+            token = request.headers.get('X-API-Token')
         
         if not token or token != MES_API_TOKEN:
-            return jsonify({'error': 'Authentication required. Provide X-API-Token header or ?token='}), 401
+            logging.warning(
+                f"AUTH_FAIL | {request.remote_addr} | {request.method} {request.path}"
+            )
+            return jsonify({'error': 'Authentication required. Provide Authorization: Bearer <token> header.'}), 401
         
         return f(*args, **kwargs)
     return decorated
@@ -102,6 +146,7 @@ def get_db_connection():
     """Get database connection"""
     conn = sqlite3.connect(os.path.join(os.path.dirname(__file__), 'server.db'))
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 def sanitize_csv_value(value):

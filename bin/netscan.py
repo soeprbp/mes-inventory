@@ -80,7 +80,7 @@ class NetworkScanner:
         """Fallback using ipconfig"""
         subnets = []
         try:
-            result = subprocess.run('ipconfig', shell=True, capture_output=True, text=True)
+            result = subprocess.run(['ipconfig'], capture_output=True, text=True)
             current_adapter = None
             current_ip = None
             current_mask = None
@@ -133,7 +133,6 @@ class NetworkScanner:
         try:
             result = subprocess.run(
                 ['ping', '-n', '1', '-w', '500', ip],
-                shell=True,
                 capture_output=True,
                 timeout=1
             )
@@ -156,8 +155,7 @@ class NetworkScanner:
         """Get MAC address from ARP cache"""
         try:
             result = subprocess.run(
-                f'arp -a {ip}',
-                shell=True,
+                ['arp', '-a', ip],
                 capture_output=True,
                 text=True
             )

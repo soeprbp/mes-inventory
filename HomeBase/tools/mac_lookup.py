@@ -6,11 +6,17 @@ OUI_DB_PATH = Path(__file__).parent.parent / "data" / "oui_database.csv"
 
 def load_oui_database():
     db = {}
-    with open(OUI_DB_PATH, 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            prefix = row['prefix'].upper().replace(':', '').replace('-', '')
-            db[prefix] = row['vendor_name']
+    try:
+        with open(OUI_DB_PATH, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                prefix = row.get('prefix', '').upper().replace(':', '').replace('-', '')
+                if prefix:
+                    db[prefix] = row.get('vendor_name', 'Unknown')
+    except FileNotFoundError:
+        print(f"Warning: OUI database not found at {OUI_DB_PATH}. MAC vendor lookup disabled.")
+    except Exception as e:
+        print(f"Warning: Error loading OUI database: {e}. MAC vendor lookup disabled.")
     return db
 
 _oui_db = load_oui_database()
