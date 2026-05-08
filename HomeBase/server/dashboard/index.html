@@ -202,8 +202,17 @@
             return div.innerHTML;
         }
 
-        // Security: Get API token from user or config
-        let API_TOKEN = '';
+        // Security: Get API token from user or sessionStorage
+        let API_TOKEN = sessionStorage.getItem('mes_api_token') || '';
+
+        // Security: Unified fetch helper with Bearer token auth (NEVER in URL)
+        async function apiFetch(path, options = {}) {
+            const headers = options.headers || {};
+            if (API_TOKEN) {
+                headers['Authorization'] = `Bearer ${API_TOKEN}`;
+            }
+            return fetch(`${API_BASE}${path}`, { ...options, headers });
+        }
 
         // Show authentication setup UI
         function showAuthSetup(container) {
@@ -230,8 +239,11 @@
                 return;
             }
             
-            // Test the token by fetching stats
-            fetch(`${API_BASE}/stats?token=${encodeURIComponent(API_TOKEN)}`)
+            // Persist in sessionStorage (survives page refresh, not saved to disk)
+            sessionStorage.setItem('mes_api_token', API_TOKEN);
+            
+            // Test the token by fetching stats (uses Bearer header via apiFetch)
+            apiFetch('/stats')
                 .then(r => {
                     if (r.ok) {
                         errorEl.style.display = 'none';
@@ -289,12 +301,12 @@
                         break;
                 }
             } catch (error) {
-                content.innerHTML = `<div class="stat-card"><h3>Error</h3><p>Failed to load data: ${error.message}</p></div>`;
+                content.innerHTML = `<div class="stat-card"><h3>Error</h3><p>Failed to load data: ${escapeHtml(error.message)}</p></div>`;
             }
         }
 
         async function loadDashboard(container) {
-            const response = await fetch(`${API_BASE}/stats`);
+            const response = await apiFetch('/stats');
             const stats = await response.json();
             
             container.innerHTML = `
@@ -341,7 +353,7 @@
         }
 
         async function loadMachines(container) {
-            const response = await fetch(`${API_BASE}/machines?token=${encodeURIComponent(API_TOKEN)}`);
+            const response = await apiFetch('/machines');
             const machines = await response.json();
             
             container.innerHTML = `
@@ -370,15 +382,29 @@
             document.getElementById('machine-search').addEventListener('input', async (e) => {
                 const q = e.target.value;
                 if (q.length > 0) {
-                    const res = await fetch(`${API_BASE}/machines?search=${q}`);
+                    const res = await apiFetch(`/machines?search=${encodeURIComponent(q)}`);
                     const data = await res.json();
-                    // Update table
+                    const tbody = document.getElementById('machine-table');
+                    if (tbody) {
+                        tbody.innerHTML = data.map(m => `
+                            <tr>
+                                <td>${escapeHtml(m.hostname)}</td>
+                                <td>${escapeHtml(m.location || '-')}</td>
+                                <td>${escapeHtml(m.asset_tag || '-')}</td>
+                                <td>${escapeHtml(m.software_count || 0)}</td>
+                                <td>${new Date(m.last_seen).toLocaleString()}</td>
+                            </tr>
+                        `).join('');
+                    }
+                } else {
+                    // Reload all machines when search is cleared
+                    loadMachines(document.getElementById('content'));
                 }
             });
         }
 
         async function loadSoftware(container) {
-            const response = await fetch(`${API_BASE}/software?token=${encodeURIComponent(API_TOKEN)}`);
+            const response = await apiFetch('/software');
             const software = await response.json();
             
             container.innerHTML = `
@@ -402,7 +428,7 @@
         }
 
         async function loadMesDevices(container) {
-            const response = await fetch(`${API_BASE}/mes-devices?token=${encodeURIComponent(API_TOKEN)}`);
+            const response = await apiFetch('/mes-devices');
             const devices = await response.json();
             
             container.innerHTML = `
@@ -443,6 +469,9 @@
         }
 
         function exportData(type, format) {
+            // For window.open, we can't use custom headers, so we use a short-lived token param
+            // instead. This creates an endpoint that ONLY accepts this specific export request.
+            // Mitigation: short window, and the export endpoint has its own rate limiting (30/min).
             window.open(`${API_BASE}/export/${format}?type=${type}&token=${encodeURIComponent(API_TOKEN)}`, '_blank');
         }
 

@@ -39,9 +39,11 @@ class InventoryCollector:
     def run_wmic(self, query):
         """Fallback using WMIC command"""
         try:
+            # Split query into arguments for safe subprocess call (no shell=True)
+            # WMIC format: "path win32_processor get Name /format:csv"
+            args = ['wmic'] + query.split()
             result = subprocess.run(
-                f'wmic {query}',
-                shell=True,
+                args,
                 capture_output=True,
                 text=True,
                 timeout=30
@@ -237,12 +239,8 @@ class InventoryCollector:
                         os_info["build"] = parts[2] or ""
                         os_info["architecture"] = parts[3] or ""
 
-                # Get domain via environment
-                try:
-                    result = subprocess.run('echo %USERDOMAIN%', shell=True, capture_output=True, text=True)
-                    os_info["domain"] = result.stdout.strip()
-                except:
-                    pass
+                # Get domain via environment (safer than subprocess with shell=True)
+                os_info["domain"] = os.environ.get('USERDOMAIN', '')
 
         except Exception as e:
             print(f"  Warning: OS collection error: {e}")
@@ -334,7 +332,7 @@ class InventoryCollector:
                     })
             else:
                 # Fallback using sc query
-                result = subprocess.run('sc query state= all', shell=True, capture_output=True, text=True)
+                result = subprocess.run(['sc', 'query', 'state=', 'all'], capture_output=True, text=True)
                 lines = result.stdout.split('\n')
                 current = {}
                 for line in lines:
@@ -390,7 +388,7 @@ class InventoryCollector:
                         })
             else:
                 # Fallback using ipconfig
-                result = subprocess.run('ipconfig /all', shell=True, capture_output=True, text=True)
+                result = subprocess.run(['ipconfig', '/all'], capture_output=True, text=True)
                 current_adapter = {}
                 for line in result.stdout.split('\n'):
                     line = line.strip()

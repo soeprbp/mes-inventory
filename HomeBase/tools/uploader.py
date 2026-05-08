@@ -50,6 +50,31 @@ except ImportError as e:
     sys.exit(1)
 
 
+def validate_inventory_json(data: dict) -> bool:
+    """Validate that the imported JSON has the minimum required fields"""
+    if not isinstance(data, dict):
+        raise ValueError("Invalid data: expected a JSON object")
+    
+    if 'hostname' not in data or not data.get('hostname'):
+        raise ValueError("Missing required field: 'hostname'")
+    
+    # hostname must be a string
+    if not isinstance(data['hostname'], str):
+        raise ValueError("'hostname' must be a string")
+    
+    # Validate hardware if present
+    hw = data.get('hardware', {})
+    if hw and not isinstance(hw, dict):
+        raise ValueError("'hardware' must be a JSON object")
+    
+    # Validate collections are lists if present
+    for field in ['software', 'services', 'network']:
+        if field in data and not isinstance(data[field], list):
+            raise ValueError(f"'{field}' must be a JSON array")
+    
+    return True
+
+
 def scan_usb_json_files(usb_path: str) -> list:
     """Scan USB drive for inventory JSON files"""
     inventory_dir = Path(usb_path) / "data" / "inventory"
@@ -140,6 +165,16 @@ def import_to_database(staging_dir: Path) -> int:
         try:
             with open(json_file, 'r', encoding='utf-8-sig') as f:
                 data = json.load(f)
+            
+            # Validate JSON schema before importing
+            try:
+                validate_inventory_json(data)
+            except ValueError as ve:
+                print(f"  Validation failed for {json_file.name}: {ve}")
+                error_dir = Path(data_path) / "error"
+                error_dir.mkdir(exist_ok=True)
+                shutil.move(str(json_file), str(error_dir / json_file.name))
+                continue
             
             # Extract location/asset tag from filename if possible
             # Format: hostname_YYYYMMDD_HHMMSS.json or hostname_location_tag_timestamp.json
