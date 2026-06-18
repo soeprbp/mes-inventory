@@ -24,3 +24,9 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+button,
+input,
+textarea {
+  letter-spacing: 0;
+}

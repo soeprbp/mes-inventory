@@ -1,6 +1,15 @@
 "use client";
 
-import { Camera, CheckCircle2, LoaderCircle, Save, Upload } from "lucide-react";
+import {
+  CheckCircle2,
+  Cpu,
+  FileText,
+  ImagePlus,
+  LoaderCircle,
+  MapPin,
+  Save,
+  Upload,
+} from "lucide-react";
 import { FormEvent, useMemo, useRef, useState } from "react";
 
 type UploadedPhoto = {
@@ -141,30 +150,62 @@ export function CaptureForm({ databaseConfigured }: CaptureFormProps) {
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block sm:col-span-2">
-          <span className="mb-1.5 block text-sm font-medium text-zinc-800">
-            Equipment label
-          </span>
-          <input
-            className="h-11 w-full rounded-md border border-zinc-300 px-3 text-base outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200"
-            name="label"
-            placeholder="Line 3 PLC cabinet"
-            required
-          />
-        </label>
+      <div>
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-900">
+          <Cpu aria-hidden="true" className="h-4 w-4 text-emerald-700" />
+          Identity
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block sm:col-span-2">
+            <span className="mb-1.5 block text-sm font-medium text-zinc-800">
+              Equipment label
+            </span>
+            <input
+              className="h-11 w-full rounded-md border border-zinc-300 px-3 text-base outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200"
+              name="label"
+              placeholder="Line 3 PLC cabinet"
+              required
+            />
+          </label>
 
-        <TextField label="Hostname" name="hostname" placeholder="PLC-L3-02" />
-        <TextField label="Asset tag" name="assetTag" placeholder="MES-1042" />
-        <TextField label="Location" name="location" placeholder="Plant 1 / Line 3" />
-        <TextField label="Type guess" name="equipmentTypeGuess" placeholder="PLC, HMI, workstation" />
-        <TextField label="Manufacturer" name="manufacturer" placeholder="Allen-Bradley" />
-        <TextField label="Model" name="model" placeholder="ControlLogix" />
-        <TextField label="Serial number" name="serialNumber" placeholder="SN or service tag" />
+          <TextField label="Hostname" name="hostname" placeholder="PLC-L3-02" />
+          <TextField label="Asset tag" name="assetTag" placeholder="MES-1042" />
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-900">
+          <MapPin aria-hidden="true" className="h-4 w-4 text-emerald-700" />
+          Classification
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField
+            label="Location"
+            name="location"
+            placeholder="Plant 1 / Line 3"
+          />
+          <TextField
+            label="Type guess"
+            name="equipmentTypeGuess"
+            placeholder="PLC, HMI, workstation"
+          />
+          <TextField
+            label="Manufacturer"
+            name="manufacturer"
+            placeholder="Allen-Bradley"
+          />
+          <TextField label="Model" name="model" placeholder="ControlLogix" />
+          <TextField
+            label="Serial number"
+            name="serialNumber"
+            placeholder="SN or service tag"
+          />
+        </div>
       </div>
 
       <label className="block">
-        <span className="mb-1.5 block text-sm font-medium text-zinc-800">
+        <span className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-zinc-900">
+          <FileText aria-hidden="true" className="h-4 w-4 text-emerald-700" />
           Notes
         </span>
         <textarea
@@ -176,7 +217,7 @@ export function CaptureForm({ databaseConfigured }: CaptureFormProps) {
 
       <div className="rounded-md border border-dashed border-zinc-400 bg-zinc-50 p-4">
         <span className="flex items-center gap-2 text-sm font-medium text-zinc-800">
-          <Camera aria-hidden="true" className="h-4 w-4" />
+          <ImagePlus aria-hidden="true" className="h-4 w-4" />
           Photos
         </span>
         <input
@@ -234,7 +275,7 @@ function TextField({
         {label}
       </span>
       <input
-        className="h-11 w-full rounded-md border border-zinc-300 px-3 text-base outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200"
+        className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none transition placeholder:text-zinc-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200"
         name={name}
         placeholder={placeholder}
       />

@@ -9,7 +9,7 @@ export default async function Home() {
 
   if (!session) {
     return (
-      <main className="min-h-dvh bg-stone-100 text-zinc-950">
+      <main className="min-h-dvh bg-[#eef2ef] text-zinc-950">
         <section className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-8">
           <div className="rounded-md border border-zinc-300 bg-white p-5 shadow-sm">
             <div className="mb-6">
@@ -17,6 +17,9 @@ export default async function Home() {
                 MES Inventory
               </p>
               <h1 className="mt-2 text-2xl font-semibold">Field capture</h1>
+              <p className="mt-2 text-sm text-zinc-600">
+                Sign in to capture equipment, photos, notes, and AI review.
+              </p>
             </div>
             <LoginForm />
           </div>
