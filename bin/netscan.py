@@ -200,48 +200,43 @@ class NetworkScanner:
     def scan_subnet(self, subnet: Dict, max_workers: int = 50) -> List[Dict]:
         """Scan an entire subnet"""
         print(f"  Scanning {subnet['network']}/{subnet['cidr']} ({subnet['ip']})...")
-        
+
         devices = []
         start_time = time.time()
-        
-        # Calculate IP range
+
         first = self._ip_to_int(subnet['first_host'])
         last = self._ip_to_int(subnet['last_host'])
-        
-        # Limit scan to reasonable range (254 hosts for /24)
+
         if last - first > 254:
             last = first + 254
-        
+
         ips = [self._int_to_ip(i) for i in range(first, last + 1)]
         print(f"  Scanning {len(ips)} hosts...")
-        
-        # Parallel scan
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(self.scan_host, ip): ip for ip in ips}
-            
-            for future in concurrent.futures.as_completed(futures, timeout=self.scan_timeout):
-                try:
-                    result = future.result()
-                    if result and (result["alive"] or result["mes_ports"]):
-                        devices.append(result)
-                        
-                        # Show progress for discovered MES devices
-                        if result["mes_ports"]:
-                            for p in result["mes_ports"]:
-                                print(f"    Found: {result['ip']} - {p['protocol']} ({p['vendor']})")
-                except concurrent.futures.TimeoutError:
-                    break
-                except Exception as e:
-                    pass
-                
-                # Check timeout
-                if time.time() - start_time > self.scan_timeout:
-                    print("  Timeout reached, stopping scan...")
-                    break
-        
+
+            try:
+                for future in concurrent.futures.as_completed(futures, timeout=self.scan_timeout):
+                    try:
+                        result = future.result()
+                        if result and (result["alive"] or result["mes_ports"]):
+                            devices.append(result)
+                            if result["mes_ports"]:
+                                for p in result["mes_ports"]:
+                                    print(f"    Found: {result['ip']} - {p['protocol']} ({p['vendor']})")
+                    except Exception:
+                        pass
+
+                    if time.time() - start_time > self.scan_timeout:
+                        print("  Timeout reached, stopping scan...")
+                        break
+            except concurrent.futures.TimeoutError:
+                print("  Timeout reached, stopping scan...")
+
         elapsed = time.time() - start_time
         print(f"  Scan complete: {len(devices)} devices found in {elapsed:.1f}s")
-        
+
         return devices
     
     def run_full_scan(self) -> Dict:

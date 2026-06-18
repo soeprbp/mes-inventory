@@ -61,7 +61,29 @@ def log_request():
 # Rate limiting: Simple in-memory counter (per IP)
 from collections import defaultdict
 from time import time
+from threading import RLock
+
 rate_limit_hits = defaultdict(list)
+_rate_limit_lock = RLock()
+_RATE_LIMIT_MAX_ENTRIES = 10000  # Prevent unbounded growth
+
+
+def _cleanup_rate_limit():
+    """Remove stale rate limit entries and cap total entries."""
+    now = time()
+    with _rate_limit_lock:
+        # Prune old entries for each IP
+        for ip in list(rate_limit_hits.keys()):
+            rate_limit_hits[ip] = [t for t in rate_limit_hits[ip] if now - t < 300]
+            if not rate_limit_hits[ip]:
+                del rate_limit_hits[ip]
+        # If total unique IPs exceeds cap, clear oldest half
+        if len(rate_limit_hits) > _RATE_LIMIT_MAX_ENTRIES:
+            oldest_ips = sorted(rate_limit_hits.keys(),
+                                key=lambda ip: min(rate_limit_hits[ip]) if rate_limit_hits[ip] else now)
+            for ip in oldest_ips[:len(oldest_ips) // 2]:
+                del rate_limit_hits[ip]
+
 
 def rate_limit(max_requests=100, window_seconds=60):
     """Rate limiting decorator"""
@@ -70,17 +92,23 @@ def rate_limit(max_requests=100, window_seconds=60):
         def wrapped(*args, **kwargs):
             client_ip = request.remote_addr or 'unknown'
             now = time()
-            
-            # Clean old entries
-            rate_limit_hits[client_ip] = [
-                t for t in rate_limit_hits[client_ip] 
-                if now - t < window_seconds
-            ]
-            
-            if len(rate_limit_hits[client_ip]) >= max_requests:
-                return jsonify({'error': 'Rate limit exceeded. Please try again later.'}), 429
-            
-            rate_limit_hits[client_ip].append(now)
+
+            with _rate_limit_lock:
+                # Periodic cleanup to prevent unbounded growth
+                if len(rate_limit_hits) > _RATE_LIMIT_MAX_ENTRIES // 2:
+                    _cleanup_rate_limit()
+
+                # Clean old entries for this IP
+                rate_limit_hits[client_ip] = [
+                    t for t in rate_limit_hits[client_ip]
+                    if now - t < window_seconds
+                ]
+
+                if len(rate_limit_hits[client_ip]) >= max_requests:
+                    return jsonify({'error': 'Rate limit exceeded. Please try again later.'}), 429
+
+                rate_limit_hits[client_ip].append(now)
+
             return f(*args, **kwargs)
         return wrapped
     return decorator
@@ -199,25 +227,37 @@ def get_machines():
         elif offset > 0:
             machines = machines[offset:]
         
-        # Convert to dict and add counts
-        result = []
-        for machine in machines:
-            m_dict = dict(machine)
-            # Get counts
-            hw_count = conn.execute('SELECT COUNT(*) FROM hardware WHERE machine_id = ?', (m_dict['id'],)).fetchone()[0]
-            net_count = conn.execute('SELECT COUNT(*) FROM network WHERE machine_id = ?', (m_dict['id'],)).fetchone()[0]
-            sw_count = conn.execute('SELECT COUNT(*) FROM software WHERE machine_id = ?', (m_dict['id'],)).fetchone()[0]
-            svc_count = conn.execute('SELECT COUNT(*) FROM services WHERE machine_id = ?', (m_dict['id'],)).fetchone()[0]
-            mes_count = conn.execute('SELECT COUNT(*) FROM mes_devices WHERE machine_id = ?', (m_dict['id'],)).fetchone()[0]
-            
-            m_dict['counts'] = {
-                'hardware': hw_count,
-                'network': net_count,
-                'software': sw_count,
-                'services': svc_count,
-                'mes_devices': mes_count
+        # Convert machines to dicts
+        result = [dict(m) for m in machines]
+
+        # Batch-fetch counts for all machines in a single query
+        machine_ids = [m['id'] for m in result]
+        counts = {}
+        if machine_ids:
+            placeholders = ','.join('?' * len(machine_ids))
+            count_queries = {
+                'hardware': f'SELECT machine_id, COUNT(*) as cnt FROM hardware WHERE machine_id IN ({placeholders}) GROUP BY machine_id',
+                'network': f'SELECT machine_id, COUNT(*) as cnt FROM network WHERE machine_id IN ({placeholders}) GROUP BY machine_id',
+                'software': f'SELECT machine_id, COUNT(*) as cnt FROM software WHERE machine_id IN ({placeholders}) GROUP BY machine_id',
+                'services': f'SELECT machine_id, COUNT(*) as cnt FROM services WHERE machine_id IN ({placeholders}) GROUP BY machine_id',
+                'mes_devices': f'SELECT machine_id, COUNT(*) as cnt FROM mes_devices WHERE machine_id IN ({placeholders}) GROUP BY machine_id',
             }
-            result.append(m_dict)
+            for key, q in count_queries.items():
+                rows = conn.execute(q, machine_ids).fetchall()
+                for row in rows:
+                    if row['machine_id'] not in counts:
+                        counts[row['machine_id']] = {}
+                    counts[row['machine_id']][key] = row['cnt']
+
+        for m_dict in result:
+            cid = m_dict['id']
+            m_dict['counts'] = {
+                'hardware': counts.get(cid, {}).get('hardware', 0),
+                'network': counts.get(cid, {}).get('network', 0),
+                'software': counts.get(cid, {}).get('software', 0),
+                'services': counts.get(cid, {}).get('services', 0),
+                'mes_devices': counts.get(cid, {}).get('mes_devices', 0),
+            }
         
         return jsonify(result)
     finally:
