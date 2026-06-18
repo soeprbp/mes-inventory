@@ -1,0 +1,19 @@
+{
+  "name": "mes-inventory-cloudflare-r2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Project-local Cloudflare R2 helpers and MCP server for MES Inventory.",
+  "scripts": {
+    "check": "node src/check-r2.mjs",
+    "configure-cors": "node src/configure-cors.mjs",
+    "mcp": "node src/mcp-server.mjs",
+    "syntax": "node --check src/env.mjs && node --check src/cloudflare-api.mjs && node --check src/r2-client.mjs && node --check src/check-r2.mjs && node --check src/configure-cors.mjs && node --check src/mcp-server.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1071.0",
+    "@aws-sdk/s3-request-presigner": "^3.1071.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.76"
+  }
+}

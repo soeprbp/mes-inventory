@@ -45,8 +45,24 @@ USB ─uploader.py─> staging ─llm_processor.py─> backup ──> database
 API ───> dashboard (http://localhost:5000) <── export.py
 ```
 
+## Hosted Field Capture Beta
+
+The repo now includes a phone-friendly hosted capture app in `web/`.
+
+- Vercel hosts the Next.js app.
+- Neon stores assets, notes, photo metadata, and AI analysis jobs.
+- Cloudflare R2 stores private photo objects.
+- OpenCode Go processes queued equipment-photo analysis jobs.
+
+Field operators enter equipment details, upload/take photos, and queue analysis
+from the web app. The analysis worker reads queued Neon jobs, fetches the private
+R2 image through a short-lived URL, runs the configured vision model fallback
+chain, and writes structured results back to Neon.
+
 ## Documentation
 
 - `SPEC.md` — Technical specification, database schema
 - `DEVELOPER_GUIDE.md` — Build instructions, API reference
 - `REBUILD.md` — Complete rebuild from scratch
+- `docs/cloudflare-r2.md` — Cloudflare R2 object storage and MCP setup
+- `docs/field-capture-beta.md` — Hosted beta app, worker flow, and operations

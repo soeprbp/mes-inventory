@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "cloudflare-api": {
+      "url": "https://mcp.cloudflare.com/mcp"
+    },
+    "cloudflare-r2-local": {
+      "command": "node",
+      "args": [
+        "tools/cloudflare-r2/src/mcp-server.mjs"
+      ]
+    },
+    "neon": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@latest",
+        "https://mcp.neon.tech/mcp"
+      ]
+    }
+  }
+}
